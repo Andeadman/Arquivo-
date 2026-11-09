@@ -163,8 +163,9 @@
 
       localStorage.setItem('gemini_api_key', config.apiKey);
       localStorage.setItem('user_name', config.userName);
-      localStorage.setItem('ai_name', config.
-                           document.getElementById('chat-header-title').innerText = `💬 ${config.aiName}`;
+      localStorage.setItem('ai_name', config.aiName);
+
+      document.getElementById('chat-header-title').innerText = `💬 ${config.aiName}`;
       closeSettingsModal();
       alert('Configurações salvas!');
     }
