@@ -22,13 +22,13 @@
 
     .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
     .modal-overlay.hidden { display: none !important; }
-    .modal-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7); }
+    .modal-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7); max-height: 90vh; overflow-y: auto; }
     .modal-card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #f8fafc; }
     
     .form-group { margin-bottom: 12px; }
     .form-group label { display: block; font-size: 0.75rem; color: #94a3b8; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; }
-    .form-group input, .form-group select { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; }
-    .form-group input:focus, .form-group select:focus { border-color: #6366f1; }
+    .form-group input, .form-group textarea { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; }
+    .form-group input:focus, .form-group textarea:focus { border-color: #6366f1; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
     aside#chat-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 100%; max-width: 380px; background: #0f172a; border-left: 1px solid #1e293b; display: flex; flex-direction: column; z-index: 90; transition: transform 0.3s ease; }
@@ -92,15 +92,43 @@
       <h2>Adicionar Personagem</h2>
       <div class="form-group">
         <label>Nome do Personagem</label>
-        <input type="text" id="node-name" placeholder="Ex: Yas">
+        <input type="text" id="node-name" placeholder="Ex: Quartz, Yas, Naruto...">
       </div>
       <div class="form-group">
         <label>Universo / Facção</label>
-        <input type="text" id="node-group" placeholder="Ex: Cyberpunk, Fantasia...">
+        <input type="text" id="node-group" placeholder="Ex: Steven Universo, Pokémon, Cyberpunk...">
       </div>
       <div class="modal-actions">
         <button type="button" onclick="window.closeModal('modal-node')">Cancelar</button>
         <button type="button" class="btn-primary" onclick="window.createNode()">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detalhes do Personagem / Lore do Universo -->
+  <div id="modal-details" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 id="details-title">Ficha do Personagem</h2>
+      <input type="hidden" id="details-id">
+      
+      <div class="form-group">
+        <label>Universo / Facção</label>
+        <input type="text" id="details-group" readonly style="opacity: 0.7;">
+      </div>
+
+      <div id="dynamic-fields-container">
+        <!-- Campos dinâmicos padrão do universo serão inseridos aqui -->
+      </div>
+
+      <div class="form-group">
+        <label>Notas Gerais / Lore Adicional</label>
+        <textarea id="details-notes" rows="3" placeholder="História, personalidade ou detalhes extras..."></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" style="background:#ef4444; border-color:#dc2626;" onclick="window.deleteNode()">Excluir</button>
+        <button type="button" onclick="window.closeModal('modal-details')">Cancelar</button>
+        <button type="button" class="btn-primary" onclick="window.saveNodeDetails()">Salvar Ficha</button>
       </div>
     </div>
   </div>
@@ -119,6 +147,27 @@
   </aside>
 
   <script>
+    // --- TEMPLATES DE PADRÕES POR UNIVERSO ---
+    const UNIVERSE_PATTERNS = {
+      'steven universo': ['Tipo de Gema', 'Local da Pedra', 'Arma da Gema', 'Poderes Únicos'],
+      'pokemon': ['Tipo(s)', 'Habilidade', 'Movepool Principal', 'Região'],
+      'naruto': ['Vila/Clã', 'Elemento de Chakra', 'Jutsu Principal', 'Rank Ninja'],
+      'cyberpunk': ['Cyberware', 'Facção/Gangue', 'Especialidade', 'Estilo de Vida'],
+      'boku no hero': ['Nome da Individualidade', 'Tipo da Quirk', 'Estilo de Luta'],
+      'ghost': ['Tipo de Fantasma', 'Habilidade Espectral', 'Objeto de Ancoragem']
+    };
+
+    function getUniverseFields(groupName) {
+      const cleanGroup = (groupName || '').trim().toLowerCase();
+      for (let universe in UNIVERSE_PATTERNS) {
+        if (cleanGroup.includes(universe)) {
+          return UNIVERSE_PATTERNS[universe];
+        }
+      }
+      // Padrão Genérico se o universo não for pré-mapeado
+      return ['Poderes/Habilidades', 'Arma/Equipamento', 'Função/Cargo'];
+    }
+
     // --- ESTADO & CONFIGURAÇÃO ---
     let config = {
       apiKey: (localStorage.getItem('c_key') || '').trim(),
@@ -131,8 +180,28 @@
     let chatHistory = JSON.parse(localStorage.getItem('c_chat') || '[]');
 
     if (nodes.length === 0) {
-      nodes.push({ id: 1, name: 'Protagonista', group: 'Geral', x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      nodes.push({ 
+        id: 1, 
+        name: 'Quartz Rosa', 
+        group: 'Steven Universo', 
+        x: window.innerWidth / 2 - 60, 
+        y: window.innerHeight / 2,
+        attributes: { 'Tipo de Gema': 'Quartzo', 'Local da Pedra': 'Umbigo', 'Arma da Gema': 'Escudo', 'Poderes Únicos': 'Lágrimas curativas' },
+        notes: 'Líder das Crystal Gems.'
+      });
       localStorage.setItem('c_nodes', JSON.stringify(nodes));
+    }
+
+    const groupColors = {};
+    const palette = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#f43f5e'];
+
+    function getGroupColor(groupName) {
+      const key = (groupName || 'Geral').trim().toLowerCase();
+      if (!groupColors[key]) {
+        const index = Object.keys(groupColors).length % palette.length;
+        groupColors[key] = palette[index];
+      }
+      return groupColors[key];
     }
 
     // --- CANVAS ENGINE (MAPA) ---
@@ -141,6 +210,7 @@
     let draggedNode = null;
     let isDragging = false;
     let dragOffset = { x: 0, y: 0 };
+    let clickStartPos = { x: 0, y: 0 };
 
     function resizeCanvas() {
       canvas.width = canvas.parentElement.clientWidth;
@@ -152,30 +222,37 @@
     function drawMap() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 1.5;
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
+          const sameGroup = nodes[i].group === nodes[j].group;
           ctx.beginPath();
           ctx.moveTo(nodes[i].x, nodes[i].y);
           ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.strokeStyle = sameGroup ? '#475569' : '#1e293b';
+          ctx.lineWidth = sameGroup ? 2 : 1;
           ctx.stroke();
         }
       }
 
       nodes.forEach(node => {
+        const color = getGroupColor(node.group);
+
         ctx.beginPath();
-        ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
-        ctx.fillStyle = '#6366f1';
+        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = color;
         ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#818cf8';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#f8fafc';
         ctx.stroke();
 
         ctx.fillStyle = '#f8fafc';
-        ctx.font = '12px sans-serif';
+        ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(node.name, node.x, node.y + 32);
+        ctx.fillText(node.name, node.x, node.y + 35);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(`[${node.group || 'Geral'}]`, node.x, node.y + 48);
       });
     }
 
@@ -188,6 +265,7 @@
 
     function onPointerDown(e) {
       const pos = getPos(e);
+      clickStartPos = pos;
       draggedNode = nodes.find(n => Math.hypot(n.x - pos.x, n.y - pos.y) < 25);
       if (draggedNode) {
         isDragging = true;
@@ -205,8 +283,16 @@
       }
     }
 
-    function onPointerUp() {
-      if (isDragging) {
+    function onPointerUp(e) {
+      if (isDragging && draggedNode) {
+        const pos = getPos(e);
+        const distMoved = Math.hypot(pos.x - clickStartPos.x, pos.y - clickStartPos.y);
+        
+        // Se movimentou quase nada, considera um clique para abrir os Detalhes do Personagem
+        if (distMoved < 5) {
+          window.openDetailsModal(draggedNode);
+        }
+
         isDragging = false;
         draggedNode = null;
         localStorage.setItem('c_nodes', JSON.stringify(nodes));
@@ -221,7 +307,7 @@
     canvas.addEventListener('touchmove', onPointerMove, { passive: true });
     window.addEventListener('touchend', onPointerUp);
 
-    // --- FUNÇÕES GLOBAIS SEGURAS ---
+    // --- FUNÇÕES GLOBAIS SEGURAS & MODAIS ---
     window.openModal = function(id) {
       if (id === 'modal-settings') {
         document.getElementById('cfg-key').value = config.apiKey;
@@ -234,6 +320,61 @@
 
     window.closeModal = function(id) {
       document.getElementById(id).classList.add('hidden');
+    }
+
+    window.openDetailsModal = function(node) {
+      document.getElementById('details-id').value = node.id;
+      document.getElementById('details-title').innerText = `✨ ${node.name}`;
+      document.getElementById('details-group').value = node.group || 'Geral';
+      document.getElementById('details-notes').value = node.notes || '';
+
+      const container = document.getElementById('dynamic-fields-container');
+      container.innerHTML = '';
+
+      const fields = getUniverseFields(node.group);
+      const attributes = node.attributes || {};
+
+      fields.forEach(field => {
+        const div = document.createElement('div');
+        div.className = 'form-group';
+        div.innerHTML = `
+          <label>${field}</label>
+          <input type="text" class="dyn-attr-input" data-key="${field}" value="${attributes[field] || ''}" placeholder="Ex: Defina ${field.toLowerCase()}...">
+        `;
+        container.appendChild(div);
+      });
+
+      window.openModal('modal-details');
+    }
+
+    window.saveNodeDetails = function() {
+      const id = parseInt(document.getElementById('details-id').value);
+      const node = nodes.find(n => n.id === id);
+      if (!node) return;
+
+      node.notes = document.getElementById('details-notes').value.trim();
+      node.attributes = {};
+
+      const attrInputs = document.querySelectorAll('.dyn-attr-input');
+      attrInputs.forEach(input => {
+        const key = input.getAttribute('data-key');
+        const val = input.value.trim();
+        if (val) node.attributes[key] = val;
+      });
+
+      localStorage.setItem('c_nodes', JSON.stringify(nodes));
+      window.closeModal('modal-details');
+      alert('Ficha do universo salva com sucesso!');
+    }
+
+    window.deleteNode = function() {
+      const id = parseInt(document.getElementById('details-id').value);
+      if (confirm('Deseja excluir este personagem do mapa?')) {
+        nodes = nodes.filter(n => n.id !== id);
+        localStorage.setItem('c_nodes', JSON.stringify(nodes));
+        drawMap();
+        window.closeModal('modal-details');
+      }
     }
 
     window.saveSettings = function() {
@@ -249,7 +390,7 @@
 
       document.getElementById('chat-title').innerText = `💬 ${config.aiName}`;
       window.closeModal('modal-settings');
-      alert('Configurações salvas com sucesso!');
+      alert('Configurações salvas!');
     }
 
     window.createNode = function() {
@@ -264,8 +405,10 @@
         id: Date.now(),
         name: name,
         group: group,
-        x: canvas.width / 2 + (Math.random() * 80 - 40),
-        y: canvas.height / 2 + (Math.random() * 80 - 40)
+        x: canvas.width / 2 + (Math.random() * 100 - 50),
+        y: canvas.height / 2 + (Math.random() * 100 - 50),
+        attributes: {},
+        notes: ''
       };
 
       nodes.push(newNode);
@@ -275,6 +418,9 @@
       nameInput.value = '';
       groupInput.value = '';
       window.closeModal('modal-node');
+
+      // Abre a ficha imediatamente após criar para preencher os padrões do universo
+      window.openDetailsModal(newNode);
     }
 
     window.toggleChat = function() {
@@ -300,14 +446,13 @@
       if (!text) return;
 
       if (!config.apiKey) {
-        alert('Por favor, adicione sua Chave de API nas configurações (⚙️) antes de conversar.');
+        alert('Adicione sua Chave de API nas configurações (⚙️).');
         window.openModal('modal-settings');
         return;
       }
 
       chatHistory.push({ role: 'user', text: text });
       input.value = '';
-      
       chatHistory.push({ role: 'ai', text: '<i>Pensando...</i>' });
       renderChat();
 
@@ -316,52 +461,49 @@
         const cleanKey = encodeURIComponent(config.apiKey);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${cleanKey}`;
 
+        // Constrói o contexto rico com todos os atributos específicos do universo de cada personagem
+        const loreContext = nodes.map(n => {
+          let attrText = '';
+          if (n.attributes && Object.keys(n.attributes).length > 0) {
+            attrText = Object.entries(n.attributes).map(([k, v]) => `${k}: ${v}`).join(', ');
+          }
+          return `- ${n.name} (Universo: ${n.group})${attrText ? ' [' + attrText + ']' : ''}${n.notes ? ' (Nota: ' + n.notes + ')' : ''}`;
+        }).join('\n');
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `Você é ${config.aiName}, uma assistente criativa de lore e OCs. Responda para ${config.userName}: ${text}`
+                text: `Você é ${config.aiName}, assistente especialista em lore e OCs de ${config.userName}.\n\nPersonagens e Atributos de Seus Universos Cadastrados:\n${loreContext}\n\nResponda à mensagem: ${text}`
               }]
             }]
           })
         });
 
-        chatHistory.pop(); // Remove "Pensando..."
+        chatHistory.pop();
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `Erro na resposta do servidor (HTTP ${response.status})`);
+          throw new Error(errData.error?.message || `HTTP ${response.status}`);
         }
 
         const data = await response.json();
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta.';
         
-        if (reply) {
-          chatHistory.push({ role: 'ai', text: reply });
-        } else {
-          chatHistory.push({ role: 'ai', text: 'Nenhuma resposta retornada pela IA.' });
-        }
-        
+        chatHistory.push({ role: 'ai', text: reply });
         localStorage.setItem('c_chat', JSON.stringify(chatHistory));
         renderChat();
       } catch (err) {
         if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].text === '<i>Pensando...</i>') {
           chatHistory.pop();
         }
-        
-        let msgErro = err.message;
-        if (msgErro.includes('Failed to fetch')) {
-          msgErro = 'Falha na conexão (Failed to fetch). Verifique se o nome do modelo nas Configurações (⚙️) está correto ou se a chave de API tem espaços.';
-        }
-        
-        chatHistory.push({ role: 'ai', text: 'Erro: ' + msgErro });
+        chatHistory.push({ role: 'ai', text: 'Erro: ' + err.message });
         renderChat();
       }
     }
 
-    // --- INICIALIZAÇÃO ---
     window.onload = () => {
       document.getElementById('chat-title').innerText = `💬 ${config.aiName}`;
       resizeCanvas();
