@@ -92,11 +92,11 @@
       <h2>Adicionar Personagem</h2>
       <div class="form-group">
         <label>Nome do Personagem</label>
-        <input type="text" id="node-name" placeholder="Ex: Quartz, Yas, Naruto...">
+        <input type="text" id="node-name" placeholder="Ex: Yas, Zoro, Goku...">
       </div>
       <div class="form-group">
-        <label>Universo / Facção</label>
-        <input type="text" id="node-group" placeholder="Ex: Steven Universo, Pokémon, Cyberpunk...">
+        <label>Universo / Facção (Qualquer mundo)</label>
+        <input type="text" id="node-group" placeholder="Ex: One Piece, Bleach, Original...">
       </div>
       <div class="modal-actions">
         <button type="button" onclick="window.closeModal('modal-node')">Cancelar</button>
@@ -105,7 +105,7 @@
     </div>
   </div>
 
-  <!-- Modal Detalhes do Personagem / Lore do Universo -->
+  <!-- Modal Detalhes do Personagem / Atributos Dinâmicos -->
   <div id="modal-details" class="modal-overlay hidden">
     <div class="modal-card">
       <h2 id="details-title">Ficha do Personagem</h2>
@@ -117,12 +117,20 @@
       </div>
 
       <div id="dynamic-fields-container">
-        <!-- Campos dinâmicos padrão do universo serão inseridos aqui -->
+        <!-- Atributos específicos do universo -->
+      </div>
+
+      <div class="form-group">
+        <label>Adicionar Novo Atributo Personalizado</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="new-attr-key" placeholder="Nome (Ex: Akuma no Mi)" style="flex:1;">
+          <button type="button" onclick="window.addCustomAttribute()" style="background:#4f46e5; color:#fff; border:none; padding:0 12px; border-radius:6px; font-weight:bold;">+</button>
+        </div>
       </div>
 
       <div class="form-group">
         <label>Notas Gerais / Lore Adicional</label>
-        <textarea id="details-notes" rows="3" placeholder="História, personalidade ou detalhes extras..."></textarea>
+        <textarea id="details-notes" rows="3" placeholder="História, personalidade..."></textarea>
       </div>
 
       <div class="modal-actions">
@@ -147,13 +155,14 @@
   </aside>
 
   <script>
-    // --- TEMPLATES DE PADRÕES POR UNIVERSO ---
+    // Padrões automáticos para universos populares
     const UNIVERSE_PATTERNS = {
       'steven universo': ['Tipo de Gema', 'Local da Pedra', 'Arma da Gema', 'Poderes Únicos'],
       'pokemon': ['Tipo(s)', 'Habilidade', 'Movepool Principal', 'Região'],
       'naruto': ['Vila/Clã', 'Elemento de Chakra', 'Jutsu Principal', 'Rank Ninja'],
-      'cyberpunk': ['Cyberware', 'Facção/Gangue', 'Especialidade', 'Estilo de Vida'],
-      'boku no hero': ['Nome da Individualidade', 'Tipo da Quirk', 'Estilo de Luta'],
+      'one piece': ['Estilo de Luta / Estilo de Espada', 'Akuma no Mi (Fruta)', 'Recompensa (Bounty)', 'Facção / Navio'],
+      'cyberpunk': ['Cyberware Principal', 'Facção/Gangue', 'Especialidade'],
+      'boku no hero': ['Nome da Individualidade', 'Tipo da Quirk', 'Estilo de Combate'],
       'ghost': ['Tipo de Fantasma', 'Habilidade Espectral', 'Objeto de Ancoragem']
     };
 
@@ -164,11 +173,10 @@
           return UNIVERSE_PATTERNS[universe];
         }
       }
-      // Padrão Genérico se o universo não for pré-mapeado
-      return ['Poderes/Habilidades', 'Arma/Equipamento', 'Função/Cargo'];
+      // Se for qualquer outro mundo novo, gera campos coringas úteis para qualquer OC
+      return ['Poderes / Habilidades', 'Equipamento / Arma', 'Origem / Facção', 'Cargo / Classe'];
     }
 
-    // --- ESTADO & CONFIGURAÇÃO ---
     let config = {
       apiKey: (localStorage.getItem('c_key') || '').trim(),
       model: (localStorage.getItem('c_model') || 'gemini-2.5-flash').trim(),
@@ -182,12 +190,12 @@
     if (nodes.length === 0) {
       nodes.push({ 
         id: 1, 
-        name: 'Quartz Rosa', 
+        name: 'Quartz', 
         group: 'Steven Universo', 
         x: window.innerWidth / 2 - 60, 
         y: window.innerHeight / 2,
-        attributes: { 'Tipo de Gema': 'Quartzo', 'Local da Pedra': 'Umbigo', 'Arma da Gema': 'Escudo', 'Poderes Únicos': 'Lágrimas curativas' },
-        notes: 'Líder das Crystal Gems.'
+        attributes: { 'Tipo de Gema': 'Quartzo', 'Arma da Gema': 'Escudo' },
+        notes: 'Exemplo inicial.'
       });
       localStorage.setItem('c_nodes', JSON.stringify(nodes));
     }
@@ -204,7 +212,6 @@
       return groupColors[key];
     }
 
-    // --- CANVAS ENGINE (MAPA) ---
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
     let draggedNode = null;
@@ -288,7 +295,6 @@
         const pos = getPos(e);
         const distMoved = Math.hypot(pos.x - clickStartPos.x, pos.y - clickStartPos.y);
         
-        // Se movimentou quase nada, considera um clique para abrir os Detalhes do Personagem
         if (distMoved < 5) {
           window.openDetailsModal(draggedNode);
         }
@@ -307,7 +313,6 @@
     canvas.addEventListener('touchmove', onPointerMove, { passive: true });
     window.addEventListener('touchend', onPointerUp);
 
-    // --- FUNÇÕES GLOBAIS SEGURAS & MODAIS ---
     window.openModal = function(id) {
       if (id === 'modal-settings') {
         document.getElementById('cfg-key').value = config.apiKey;
@@ -331,20 +336,40 @@
       const container = document.getElementById('dynamic-fields-container');
       container.innerHTML = '';
 
-      const fields = getUniverseFields(node.group);
-      const attributes = node.attributes || {};
+      if (!node.attributes) node.attributes = {};
 
-      fields.forEach(field => {
+      // Pega os campos padrão do universo E quaisquer atributos customizados que o usuário já tenha criado
+      const defaultFields = getUniverseFields(node.group);
+      const allKeys = Array.from(new Set([...defaultFields, ...Object.keys(node.attributes)]));
+
+      allKeys.forEach(field => {
         const div = document.createElement('div');
         div.className = 'form-group';
         div.innerHTML = `
           <label>${field}</label>
-          <input type="text" class="dyn-attr-input" data-key="${field}" value="${attributes[field] || ''}" placeholder="Ex: Defina ${field.toLowerCase()}...">
+          <input type="text" class="dyn-attr-input" data-key="${field}" value="${node.attributes[field] || ''}" placeholder="Descreva ${field.toLowerCase()}...">
         `;
         container.appendChild(div);
       });
 
       window.openModal('modal-details');
+    }
+
+    // Permite adicionar novos campos personalizados na hora para qualquer mundo
+    window.addCustomAttribute = function() {
+      const keyInput = document.getElementById('new-attr-key');
+      const keyName = keyInput.value.trim();
+      if (!keyName) return;
+
+      const container = document.getElementById('dynamic-fields-container');
+      const div = document.createElement('div');
+      div.className = 'form-group';
+      div.innerHTML = `
+        <label>${keyName}</label>
+        <input type="text" class="dyn-attr-input" data-key="${keyName}" value="" placeholder="Descreva ${keyName.toLowerCase()}...">
+      `;
+      container.appendChild(div);
+      keyInput.value = '';
     }
 
     window.saveNodeDetails = function() {
@@ -364,12 +389,12 @@
 
       localStorage.setItem('c_nodes', JSON.stringify(nodes));
       window.closeModal('modal-details');
-      alert('Ficha do universo salva com sucesso!');
+      alert('Ficha atualizada!');
     }
 
     window.deleteNode = function() {
       const id = parseInt(document.getElementById('details-id').value);
-      if (confirm('Deseja excluir este personagem do mapa?')) {
+      if (confirm('Deseja excluir este personagem?')) {
         nodes = nodes.filter(n => n.id !== id);
         localStorage.setItem('c_nodes', JSON.stringify(nodes));
         drawMap();
@@ -418,8 +443,6 @@
       nameInput.value = '';
       groupInput.value = '';
       window.closeModal('modal-node');
-
-      // Abre a ficha imediatamente após criar para preencher os padrões do universo
       window.openDetailsModal(newNode);
     }
 
@@ -461,7 +484,6 @@
         const cleanKey = encodeURIComponent(config.apiKey);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${cleanKey}`;
 
-        // Constrói o contexto rico com todos os atributos específicos do universo de cada personagem
         const loreContext = nodes.map(n => {
           let attrText = '';
           if (n.attributes && Object.keys(n.attributes).length > 0) {
@@ -476,7 +498,7 @@
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `Você é ${config.aiName}, assistente especialista em lore e OCs de ${config.userName}.\n\nPersonagens e Atributos de Seus Universos Cadastrados:\n${loreContext}\n\nResponda à mensagem: ${text}`
+                text: `Você é ${config.aiName}, assistente de lore e OCs de ${config.userName}.\n\nPersonagens e Atributos Cadastrados:\n${loreContext}\n\nResponda à mensagem considerando rigorosamente esses universos e atributos: ${text}`
               }]
             }]
           })
