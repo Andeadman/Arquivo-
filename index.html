@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -327,4 +328,21 @@
         }
 
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta.';
-        chatHistory.push({ role: 'ai
+        chatHistory.push({ role: 'ai', text: reply });
+        localStorage.setItem('c_chat', JSON.stringify(chatHistory));
+        renderChat();
+      } catch (err) {
+        chatHistory.push({ role: 'ai', text: 'Erro na API: ' + err.message });
+        renderChat();
+      }
+    }
+
+    // --- INICIALIZAÇÃO ---
+    window.onload = () => {
+      document.getElementById('chat-title').innerText = `💬 ${config.aiName}`;
+      resizeCanvas();
+      renderChat();
+    };
+  </script>
+</body>
+</html>
