@@ -232,4 +232,111 @@
 
     window.saveSettings = function() {
       config.apiKey = document.getElementById('cfg-key').value.trim();
-      config.
+      config.userName = document.getElementById('cfg-user').value.trim() || 'André';
+      config.aiName = document.getElementById('cfg-ai').value.trim() || 'Astra';
+
+      localStorage.setItem('c_key', config.apiKey);
+      localStorage.setItem('c_user', config.userName);
+      localStorage.setItem('c_ai', config.aiName);
+
+      document.getElementById('chat-title').innerText = `💬 ${config.aiName}`;
+      window.closeModal('modal-settings');
+      alert('Configurações salvas com sucesso!');
+    }
+
+    window.createNode = function() {
+      const nameInput = document.getElementById('node-name');
+      const groupInput = document.getElementById('node-group');
+      const name = nameInput.value.trim();
+      const group = groupInput.value.trim() || 'Geral';
+      
+      if (!name) return;
+
+      const newNode = {
+        id: Date.now(),
+        name: name,
+        group: group,
+        x: canvas.width / 2 + (Math.random() * 80 - 40),
+        y: canvas.height / 2 + (Math.random() * 80 - 40)
+      };
+
+      nodes.push(newNode);
+      localStorage.setItem('c_nodes', JSON.stringify(nodes));
+      drawMap();
+      
+      nameInput.value = '';
+      groupInput.value = '';
+      window.closeModal('modal-node');
+    }
+
+    window.toggleChat = function() {
+      const drawer = document.getElementById('chat-drawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    function renderChat() {
+      const box = document.getElementById('chat-box');
+      box.innerHTML = '';
+      chatHistory.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `chat-msg ${msg.role}`;
+        div.innerHTML = `<strong>${msg.role === 'user' ? config.userName : config.aiName}:</strong> ${msg.text}`;
+        box.appendChild(div);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    window.sendChatMessage = async function() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (!config.apiKey) {
+        alert('Por favor, adicione sua Chave de API nas configurações (⚙️) antes de conversar.');
+        window.openModal('modal-settings');
+        return;
+      }
+
+      chatHistory.push({ role: 'user', text: text });
+      input.value = '';
+      renderChat();
+
+      try {
+        // Modelo atualizado para gemini-2.5-flash
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Você é ${config.aiName}, uma assistente criativa de lore e OCs. Responda para ${config.userName}: ${text}`
+              }]
+            }]
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta.';
+        chatHistory.push({ role: 'ai', text: reply });
+        localStorage.setItem('c_chat', JSON.stringify(chatHistory));
+        renderChat();
+      } catch (err) {
+        chatHistory.push({ role: 'ai', text: 'Erro na API: ' + err.message });
+        renderChat();
+      }
+    }
+
+    // --- INICIALIZAÇÃO ---
+    window.onload = () => {
+      document.getElementById('chat-title').innerText = `💬 ${config.aiName}`;
+      resizeCanvas();
+      renderChat();
+    };
+  </script>
+</body>
+</html>
